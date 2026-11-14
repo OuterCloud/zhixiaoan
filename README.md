@@ -101,12 +101,13 @@ python3 approve.py --for-real --interval 30    # 前台，改成 30 秒一轮
 | `config.json` | 登录态与账号配置（**含凭证，已 gitignore**） |
 | `logs/` | `approve-YYYY-MM-DD.jsonl` 审计记录 + `daemon.log` 运行日志 |
 | `selftest.py` | 离线自测：假数据验证筛选/去重/重试逻辑，不连服务器 |
-| `probe.py` | 接口探针：用真实浏览器打开某页面，打印它调用的接口。以后系统改版时用它重新摸接口 |
+| `probe.py` | 接口探针：用真实浏览器打开某页面，打印它调用的接口。登录态读 `config.json`，以后系统改版时用它重新摸接口 |
 | `capture.py` | 抓包器：交互式录制页面全部 fetch/XHR，含请求响应体 |
 
 > `probe.py` / `capture.py` 需要 Playwright（日常审批用不到，只在系统改版、要重新摸接口时才用）。
 > 需要时现装即可：`python3 -m venv .venv && .venv/bin/pip install playwright`，
 > 再用 `.venv/bin/python probe.py <URL>` 运行。
+> `probe.py` 的 token 和账号信息直接读 `config.json`，所以先跑一次 `./run.sh login`。
 
 改动脚本后跑一下自测确认没写坏：
 

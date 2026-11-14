@@ -4,9 +4,10 @@
 接口探针：用真实浏览器 + 现成的登录态打开某个页面，把它调用的所有 /api/ 接口
 （方法、请求体、响应体）打出来。用来确定接口的真实参数格式。
 
+登录态取自 config.json（先跑一次 ./run.sh login），不在这里写死任何账号信息。
+
 用法：
-    .venv/bin/python zhixiaoan/probe.py "/zyycloudattendance/zyycloudphone/leave/approve/list?id=...&token=...&personId=...&userType=157&organCode=..."
-    .venv/bin/python zhixiaoan/probe.py "<完整 URL>" --wait 12
+    .venv/bin/python zhixiaoan/probe.py "<页面路径或完整 URL>" --wait 12
 """
 
 import argparse
@@ -15,49 +16,47 @@ import sys
 import time
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
-
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
+import approve  # noqa: E402
+
 ORIGIN = "https://cloud.zuyxa.com"
 
-USERINFO = {
-    # 占位值：换成你自己账号的信息，否则页面拿不到数据
-    "id": "00000000000000000000000000000000",
-    "realname": "示例教师",
-    "orgCode": "A03A00A00A00",
-    "orgName": "示例学校",
-    "imgPath": None,
-    "queryNumber": "00000000000000000000000000000000",
-    "documentType": None,
-    "phone": None,
-    "userType": "157",
-    "feeStatus": None,
-    "permissionList": [],
-}
 
-
-def jload(s):
-    """localStorage 里的值是 {value:..., expire:...} 包装过的，解开它。"""
-    try:
-        return json.loads(s).get("value")
-    except Exception:
-        return s
+def build_userinfo(cfg):
+    """页面的 localStorage 需要这份用户信息；姓名和学校只用于显示，用占位值。"""
+    return {
+        "id": cfg["personId"],
+        "realname": "示例教师",
+        "orgCode": cfg["organCode"],
+        "orgName": "示例学校",
+        "imgPath": None,
+        "queryNumber": cfg["personId"],
+        "documentType": None,
+        "phone": None,
+        "userType": cfg["userMode"],
+        "feeStatus": None,
+        "permissionList": [],
+    }
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description="打开页面，打印它调用的 /api/ 接口")
     ap.add_argument("path")
     ap.add_argument("--wait", type=float, default=10)
-    ap.add_argument("--token", default=None, help="不传则从上次抓包里取")
+    ap.add_argument("--token", default=None, help="覆盖 config.json 里的 token")
     args = ap.parse_args()
 
-    tokfile = ROOT / "token.txt"
-    token = args.token
-    if token is None:
-        if not tokfile.exists():
-            print("缺少 token：用 --token 传，或先跑一次 capture.py")
-            return 2
-        token = tokfile.read_text(encoding="utf-8").strip()
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        raise SystemExit(
+            "probe.py 需要 Playwright：python3 -m venv .venv && .venv/bin/pip install playwright"
+        ) from None
+
+    cfg = approve.load_config()
+    token = args.token or cfg["token"]
+    userinfo = build_userinfo(cfg)
 
     url = args.path if args.path.startswith("http") else ORIGIN + args.path
 
@@ -72,7 +71,7 @@ def main():
         )
         ctx.add_init_script(
             "localStorage.setItem('pro__Login_Userinfo', JSON.stringify({value: %s, expire: null}));"
-            % json.dumps(USERINFO)
+            % json.dumps(userinfo)
         )
         pg = ctx.new_page()
 
