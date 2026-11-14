@@ -1,0 +1,12 @@
+# 私人数据，不要进仓库
+.profile/
+capture/
+*.ndjson
+token.txt
+page.html
+js/
+probe_out/
+config.json
+logs/
+.daemon.pid
+__pycache__
