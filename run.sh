@@ -64,7 +64,7 @@ case "$1" in
             sleep 1
             kill -0 "$PID" 2>/dev/null && kill -9 "$PID" 2>/dev/null || true
             rm -f "$PIDFILE"
-            echo "✓ 已停止（PID $PID）"
+            echo "✓ 已停止（PID ${PID}）"
         else
             rm -f "$PIDFILE"
             echo "没在跑。"
