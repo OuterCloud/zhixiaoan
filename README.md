@@ -47,7 +47,8 @@ python3 approve.py
 | `./run.sh start` | 后台启动，每 60 秒扫一次 |
 | `./run.sh start 30` | 同上，改成每 30 秒 |
 | `./run.sh stop` / `status` / `log` | 停止 / 看状态 / 跟日志 |
-| `./run.sh token '<链接>'` | 运行中强制换登录态，不用重启，下一轮生效 |
+| `./run.sh token` | 换登录态：回车后直接粘贴链接，不用加引号（推荐） |
+| `./run.sh token '<链接>'` | 直接传参；链接里有 `&`，必须加引号 |
 | `python3 approve.py --for-real` | 前台常驻，占着当前终端（登录提示最直观） |
 | `python3 approve.py --for-real --once` | 只扫一轮就退出 |
 | `python3 approve.py --for-real --date 2026-11-13 --once` | 只补批该日期提交的（不看请假是否结束） |

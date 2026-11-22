@@ -587,6 +587,8 @@ def main():
                     help="强制常驻（带 --for-real 时本来就是常驻）")
     ap.add_argument("--login", action="store_true",
                     help="只做登录（提示你粘贴链接），完了就退出")
+    ap.add_argument("--force", action="store_true",
+                    help="配合 --login：当前登录还有效也强制重新粘贴")
     ap.add_argument("--interval", type=int, default=60,
                     help="扫描间隔秒数，默认 60")
     ap.add_argument("--heartbeat", type=int, default=600,
@@ -606,14 +608,15 @@ def main():
     if args.login:
         cfg = load_config(require=False)
         exp = token_expiry(cfg["token"]) if cfg.get("token") else None
-        if exp and exp > now():
+        if exp and exp > now() and not args.force:
             log(f"当前登录信息还有效（到 {exp:%m-%d %H:%M}），不需要重新登录。")
-            log("想强制换一个，用：./run.sh token '<链接>'")
+            log("想强制换一个：./run.sh token（回车后直接粘贴链接）")
             return 0
         if not sys.stdin.isatty():
             log("✗ 这里不是终端，没法提示你粘贴。请在终端里直接运行：python3 approve.py --login")
             return 1
-        return 0 if prompt_for_link("需要登录信息") else 1
+        reason = "替换登录信息" if args.force else "需要登录信息"
+        return 0 if prompt_for_link(reason) else 1
 
     args.types = [t.strip() for t in args.types.split(",") if t.strip()] or None
     args.interval = max(5, args.interval)              # 别把人家服务器扫爆

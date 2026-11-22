@@ -2,6 +2,7 @@
 # 智校安请假自动审批 —— 后台常驻管理
 #
 #   ./run.sh login        登录：会提示你粘贴微信里的链接（只在需要时做一次）
+#   ./run.sh token        换登录态：回车后直接粘贴链接（不用加引号）
 #   ./run.sh start        后台启动（每 60 秒扫一次，自动审批）
 #   ./run.sh start 30     同上，改成每 30 秒
 #   ./run.sh stop         停止
@@ -27,7 +28,8 @@ running() {
 case "$1" in
     login)
         cd "$DIR"
-        "$PY" approve.py --login
+        shift
+        "$PY" approve.py --login "$@"
         ;;
     start)
         if running; then
@@ -83,12 +85,15 @@ case "$1" in
         tail -f "$LOGFILE"
         ;;
     token)
-        [ -z "$2" ] && { echo "用法：./run.sh token '<微信里复制的链接>'"; exit 1; }
         cd "$DIR"
-        "$PY" approve.py --set-token "$2"
+        if [ -n "$2" ]; then
+            "$PY" approve.py --set-token "$2"
+        else
+            "$PY" approve.py --login --force
+        fi
         ;;
     *)
-        sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
         exit 1
         ;;
 esac
