@@ -87,6 +87,8 @@ python3 approve.py --for-real --interval 30    # 前台，改成 30 秒一轮
 - **只动请假还没结束的单子。** 判断依据是申请的 `applyBackSchoolTime`（返校时间），
   已经过了返校时间的积压不会碰；缺这个字段的单子也不批，因为没法判断是否结束。
 - 想按提交日期精确处理，用 `--date YYYY-MM-DD`（比如临时补批某一天）。
+- **多角色**：账号有多个角色时（比如 `101` 班主任、`157` 年级组长），在 `config.json` 里加
+  `"userModes": ["101", "157"]`，每轮会分别扫每个角色的待审批队列；不配就只扫登录链接带的那一个。
 - 系统里有个批量接口 `bathApprove`，但它会同意**所有**待审批（含以前积压的），
   所以脚本**故意不用它**，只走单条 `approve`。
 - 被过滤掉的待审批会说明原因；没有可批的单子时，每条只提示一次，不刷屏。
@@ -113,7 +115,7 @@ python3 approve.py --for-real --interval 30    # 前台，改成 30 秒一轮
 改动脚本后跑一下自测确认没写坏：
 
 ```sh
-python3 selftest.py     # 期望：通过 28 项，失败 0 项
+python3 selftest.py     # 期望：通过 30 项，失败 0 项
 ```
 
 > `config.json`、`logs/`、`.profile/`、`capture/`、`token.txt`、`js/` 都已在 `.gitignore` 里，

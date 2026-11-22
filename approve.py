@@ -52,6 +52,7 @@ CONFIG_TEMPLATE = {
     "personId": "",
     "organCode": "",
     "userMode": "",
+    "userModes": [],
     "tenant": "",
     "approveNote": "同意",
 }
@@ -159,6 +160,12 @@ def load_config(require=True):
 def save_config(cfg):
     CONFIG_PATH.write_text(
         json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def effective_modes(cfg):
+    """要扫的角色。config 里写了 userModes 就用它，否则只用登录链接带的 userMode。"""
+    modes = [str(m) for m in (cfg.get("userModes") or []) if m]
+    return modes or [str(cfg.get("userMode") or "")]
 
 
 def parse_link(link):
@@ -278,7 +285,8 @@ def prompt_for_link(reason):
         return True
 
 
-def request_json(url, cfg, method="GET", params=None, body=None, timeout=20):
+def request_json(url, cfg, method="GET", params=None, body=None, timeout=40):
+    """发请求。平台偶尔会很慢，所以读超时给到 40 秒；超时单独提示，别甩英文异常。"""
     if params:
         url = url + "?" + urllib.parse.urlencode(params)
     data = json.dumps(body).encode("utf-8") if body is not None else None
@@ -294,6 +302,8 @@ def request_json(url, cfg, method="GET", params=None, body=None, timeout=20):
     except urllib.error.HTTPError as e:
         raw = e.read().decode("utf-8", "replace")
         raise RuntimeError(f"HTTP {e.code}: {raw[:300]}") from None
+    except TimeoutError:
+        raise RuntimeError(f"请求超时（{timeout} 秒没有响应），稍后重试") from None
     except urllib.error.URLError as e:
         raise RuntimeError(f"连不上服务器：{e.reason}") from None
     try:
@@ -407,19 +417,21 @@ def scan_and_approve(cfg, args, seen, attempts, noted=None):
     默认只批请假还没结束的；给了 --date 就按提交日期精确筛。
     返回 (待审批总数, 本轮可批条数, 成功数, 失败数)。
     """
+    mode = str(cfg.get("userMode") or "")
     items = fetch_pending(cfg)
     targets = pick_pending(items, args.date, args.types)
 
     target_ids = {t.get("id") for t in targets}
-    todo = [t for t in targets if t.get("id") not in seen]
+    todo = [t for t in targets if (mode, t.get("id")) not in seen]
 
     if not todo:
         # 没有可批的：把被过滤掉的单子说明一次，免得用户看着「待批」却不知道原因
         if noted is not None:
             for it in items:
-                if it.get("id") in noted:
+                key = (mode, it.get("id"))
+                if key in noted:
                     continue
-                noted.add(it.get("id"))
+                noted.add(key)
                 log(f"不动 {describe(it)}：{skip_reason(it, args.date, args.types)}")
         return len(items), 0, 0, 0
 
@@ -456,25 +468,26 @@ def scan_and_approve(cfg, args, seen, attempts, noted=None):
 
         if good:
             ok += 1
-            seen.add(vid)                   # 已通过，不再重复提交
+            seen.add((mode, vid))           # 已通过，不再重复提交
             log(f"  ✓ {it.get('studentName','?')} — {msg}")
         else:
             fail += 1
-            attempts[vid] = attempts.get(vid, 0) + 1
-            n = attempts[vid]
+            key = (mode, vid)
+            attempts[key] = attempts.get(key, 0) + 1
+            n = attempts[key]
             log(f"  ✗ {it.get('studentName','?')} — {msg}（第 {n} 次失败）")
             if n >= MAX_ATTEMPTS:
-                seen.add(vid)               # 别无限重试，留给人工看一眼
+                seen.add(key)               # 别无限重试，留给人工看一眼
                 log(f"    连续 {MAX_ATTEMPTS} 次失败，暂时放弃这条。")
 
         write_audit({
-            "time": str(now()), "ok": good, "vacateId": vid,
+            "time": str(now()), "ok": good, "vacateId": vid, "userMode": mode,
             "student": it.get("studentName"), "grade": it.get("gradeName"),
             "className": it.get("className"), "type": it.get("vacateTypeName"),
             "createTime": it.get("createTime"),
             "leaveTime": f"{it.get('applyLeaveSchoolTime')} → {it.get('applyBackSchoolTime')}",
             "note": it.get("vacateNote"), "message": msg,
-            "attempt": attempts.get(vid, 0),
+            "attempt": attempts.get((mode, vid), 0),
         })
     return len(items), len(todo), ok, fail
 
@@ -519,7 +532,15 @@ def run_daemon(args):
             token_state = "ok"
 
             try:
-                n_all, n_todo, ok, fail = scan_and_approve(cfg, args, seen, attempts, noted)
+                n_all = n_todo = ok = fail = 0
+                for mode in effective_modes(cfg):
+                    mcfg = dict(cfg)
+                    mcfg["userMode"] = mode
+                    a, b, o, f = scan_and_approve(mcfg, args, seen, attempts, noted)
+                    n_all += a
+                    n_todo += b
+                    ok += o
+                    fail += f
                 ok_total += ok
                 fail_total += fail
                 scans += 1
@@ -608,7 +629,7 @@ def main():
     log("=" * 62)
     if cfg.get("personId"):
         log(f"账号    ：{cfg['personId']}")
-        log(f"机构    ：{cfg['organCode']}｜角色 {cfg['userMode']}")
+        log(f"机构    ：{cfg['organCode']}｜角色 {'/'.join(effective_modes(cfg))}")
     log(f"范围    ：{scope}申请"
         + (f"，类型限 {'/'.join(args.types)}" if args.types else ""))
     log(f"模式    ：{'★ 真实提交 ★' if args.for_real else '预览（不提交）'}"
@@ -646,7 +667,11 @@ def main():
         return run_daemon(args)
 
     try:
-        scan_and_approve(cfg, args, set(), {})
+        seen = set()
+        for mode in effective_modes(cfg):
+            mcfg = dict(cfg)
+            mcfg["userMode"] = mode
+            scan_and_approve(mcfg, args, seen, {})
     except RuntimeError as e:
         log(f"✗ {e}")
         return 1

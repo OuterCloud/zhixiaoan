@@ -108,7 +108,7 @@ def main():
     for _ in range(5):                          # 扫 5 轮
         approve.scan_and_approve(cfg, mkargs(types=["事假"], date=today), seen4, att4)
     check(f"只尝试了 3 次（实际 {len(calls)} 次）", len(calls) == 3)
-    check("放弃后第 4、5 轮不再提交", "t1" in seen4)
+    check("放弃后第 4、5 轮不再提交", ("157", "t1") in seen4)
 
     print("\n场景五：审计日志落盘")
     logs = list(tmp.glob("approve-*.jsonl"))
@@ -193,6 +193,13 @@ def main():
     check("返回待批 1 条、可批 0 条", counts[0] == 1 and counts[1] == 0)
     check("首轮说明了不批的原因", "请假已于" in first.getvalue())
     check("第二轮不再重复说明", second.getvalue() == "")
+
+    print("\n场景十一：多角色")
+    check("没配 userModes 时只扫登录角色",
+          approve.effective_modes({"userMode": "157"}) == ["157"])
+    check("配了 userModes 时按配置扫",
+          approve.effective_modes({"userMode": "157", "userModes": ["101", "157"]})
+          == ["101", "157"])
 
     print("\n" + "=" * 56)
     print(f"通过 {len(PASS)} 项，失败 {len(FAIL)} 项")
